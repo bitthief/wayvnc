@@ -42,6 +42,9 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 	Create a UNIX domain socket instead of TCP, treating the address as a
 	path.
 
+*-m, --vsock-socket*
+	Create a VSOCK virtual machine socket, treating the address as the CID.
+
 *-d, --disable-input*
 	Disable all remote input. This allows using wayvnc without compositor
 	support of virtual mouse / keyboard protocols.

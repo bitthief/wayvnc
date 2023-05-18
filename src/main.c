@@ -65,6 +65,7 @@
 
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_PORT 5900
+#define DEFAULT_ADDRESS_VSOCK 0xFFFFFFFF /* VMADDR_CID_ANY */
 
 #define XSTR(x) STR(x)
 #define STR(x) #x
@@ -75,6 +76,7 @@ enum socket_type {
 	SOCKET_TYPE_TCP = 0,
 	SOCKET_TYPE_UNIX,
 	SOCKET_TYPE_WEBSOCKET,
+    SOCKET_TYPE_VSOCK,
 };
 
 struct wayvnc {
@@ -718,6 +720,9 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 		case SOCKET_TYPE_WEBSOCKET:
 			self->nvnc = nvnc_open_websocket(addr, port);
 			break;
+		case SOCKET_TYPE_VSOCK:
+			self->nvnc = nvnc_open_vsock(addr, port);
+			break;
 		default:
 			abort();
 	}
@@ -1309,6 +1314,7 @@ int main(int argc, char* argv[])
 	int port = 0;
 	bool use_unix_socket = false;
 	bool use_websocket = false;
+    bool use_vsock_socket = false;
 
 	const char* output_name = NULL;
 	const char* seat_name = NULL;
@@ -1360,6 +1366,8 @@ int main(int argc, char* argv[])
 		  "Be more verbose. Same as setting --log-level=info" },
 		{ 'w', "websocket", NULL,
 		  "Create a websocket." },
+		{ 'm', "vsock-socket", NULL,
+		  "Create VSOCK socket." },
 		{ 'L', "log-level", "<level>",
 		  "Set log level. The levels are: error, warning, info, debug trace and quiet.",
 		  .default_ = "warning" },
@@ -1392,6 +1400,7 @@ int main(int argc, char* argv[])
 	show_performance = !!option_parser_get_value(&option_parser, "performance");
 	use_unix_socket = !!option_parser_get_value(&option_parser, "unix-socket");
 	use_websocket = !!option_parser_get_value(&option_parser, "websocket");
+	use_vsock_socket = !!option_parser_get_value(&option_parser, "vsock-socket");
 	disable_input = !!option_parser_get_value(&option_parser, "disable-input");
 	log_level = option_parser_get_value(&option_parser, "verbose")
 		? NVNC_LOG_INFO : NVNC_LOG_WARNING;
@@ -1421,6 +1430,16 @@ int main(int argc, char* argv[])
 		nvnc_log(NVNC_LOG_ERROR, "websocket and unix-socket are conflicting options");
 		return 1;
 	}
+	
+    if (use_unix_socket && use_vsock_socket) {
+		nvnc_log(NVNC_LOG_ERROR, "vsock-socket and unix-socket are conflicting options");
+		return 1;
+	}
+	
+    if (use_websocket && use_vsock_socket) {
+		nvnc_log(NVNC_LOG_ERROR, "websocket and vsock-socket are conflicting options");
+		return 1;
+	}
 
 	errno = 0;
 	int cfg_rc = cfg_load(&self.cfg, cfg_file);
@@ -1443,7 +1462,7 @@ int main(int argc, char* argv[])
 		if (!port) port = self.cfg.port;
 	}
 
-	if (!address) address = DEFAULT_ADDRESS;
+    if (!address) address = use_vsock_socket? DEFAULT_ADDRESS_VSOCK : DEFAULT_ADDRESS;
 	if (!port) port = DEFAULT_PORT;
 
 	self.disable_input = disable_input;
@@ -1505,6 +1524,8 @@ int main(int argc, char* argv[])
 		socket_type = SOCKET_TYPE_UNIX;
 	else if (use_websocket)
 		socket_type = SOCKET_TYPE_WEBSOCKET;
+    else if (use_vsock_socket)
+        socket_type = SOCKET_TYPE_VSOCK;
 
 	if (init_nvnc(&self, address, port, socket_type) < 0)
 		goto nvnc_failure;
